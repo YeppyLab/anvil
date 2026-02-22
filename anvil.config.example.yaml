@@ -1,0 +1,17 @@
+# Anvil Configuration
+# Copy this to anvil.config.yaml and fill in your values
+
+target:
+  baseUrl: https://api.example.com/v1
+  auth:
+    type: bearer  # bearer | api-key | none
+    token: your-token-here
+    # header: X-API-Key  # for api-key type
+
+llm:
+  provider: openai  # openai | claude | gemini
+  model: gpt-4o
+  apiKey: your-llm-api-key
+
+knowledge:
+  dir: ./src/knowledge  # where parsed specs are stored
