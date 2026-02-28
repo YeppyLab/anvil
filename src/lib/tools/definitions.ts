@@ -3,7 +3,7 @@ import { ToolDefinition } from '../adapters/interface';
 export const TOOLS: ToolDefinition[] = [
   {
     name: 'call_api',
-    description: 'Make an HTTP request to the target API',
+    description: 'Make an HTTP request to the target API. Returns status code, headers, and body.',
     parameters: {
       type: 'object',
       properties: {
@@ -11,13 +11,14 @@ export const TOOLS: ToolDefinition[] = [
         path: { type: 'string', description: 'API path (appended to base URL)' },
         headers: { type: 'object', description: 'Additional headers' },
         body: { type: 'object', description: 'Request body (JSON)' },
+        queryParams: { type: 'object', description: 'URL query parameters' },
       },
       required: ['method', 'path'],
     },
   },
   {
     name: 'assert_status',
-    description: 'Validate the response status code',
+    description: 'Validate the last response status code',
     parameters: {
       type: 'object',
       properties: {
@@ -28,31 +29,54 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     name: 'assert_body',
-    description: 'Validate response body contains expected values',
+    description: 'Validate the last response body. Use JSON path to check a specific field.',
     parameters: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: 'JSON path to check' },
-        expected: { description: 'Expected value' },
+        path: { type: 'string', description: 'Dot-notation JSON path (e.g. "data.id", "items[0].name")' },
+        expected: { description: 'Expected value (if omitted, just checks the path exists)' },
+        operator: { type: 'string', enum: ['eq', 'neq', 'gt', 'lt', 'contains', 'exists', 'type'], description: 'Comparison operator (default: eq)' },
       },
       required: ['path'],
     },
   },
   {
     name: 'extract_value',
-    description: 'Extract a value from the response for use in subsequent steps',
+    description: 'Extract a value from the last response and store it as a variable for later use',
     parameters: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: 'JSON path to extract' },
-        name: { type: 'string', description: 'Variable name to store the value' },
+        path: { type: 'string', description: 'Dot-notation JSON path to extract' },
+        name: { type: 'string', description: 'Variable name to store the value as' },
       },
       required: ['path', 'name'],
     },
   },
   {
+    name: 'get_variable',
+    description: 'Retrieve a previously stored variable value',
+    parameters: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Variable name' },
+      },
+      required: ['name'],
+    },
+  },
+  {
+    name: 'read_knowledge',
+    description: 'Read the API knowledge base (parsed specs) to understand available endpoints, request/response schemas, and authentication requirements',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'What to look for (e.g. "user endpoints", "authentication", "create order")' },
+      },
+      required: ['query'],
+    },
+  },
+  {
     name: 'report_result',
-    description: 'Log a test result',
+    description: 'Log a test result (pass/fail/warn)',
     parameters: {
       type: 'object',
       properties: {
