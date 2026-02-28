@@ -6,3 +6,9 @@ dist/
 anvil.config.yaml
 src/knowledge/*.md
 !src/knowledge/.gitkeep
+
+# Yarn v4
+.yarn/*
+!.yarn/releases
+!.yarn/plugins
+.pnp.*
