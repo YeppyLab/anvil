@@ -1,12 +1,14 @@
 import { LLMAdapter, LLMMessage, ToolCall } from '../adapters/interface';
 import { TOOLS } from '../tools/definitions';
 import { handleToolCall, ToolContext } from '../tools/handlers';
+import { StepCallback, StepEntry } from '../step-log';
 import { SYSTEM_PROMPT } from './prompts';
 
 export interface AgentConfig {
   baseUrl: string;
   auth?: { type: string; token?: string; header?: string };
   knowledgeDir?: string;
+  onStep?: StepCallback;
 }
 
 export class AgentCore {
@@ -22,10 +24,18 @@ export class AgentCore {
       auth: config.auth,
       knowledgeDir: config.knowledgeDir,
       lastResponse: null,
+      lastRequest: null,
       variables: {},
       results: [],
+      stepCount: 0,
+      steps: [],
+      onStep: config.onStep,
     };
     this.history.push({ role: 'system', content: this.buildSystemPrompt() });
+  }
+
+  get steps(): StepEntry[] {
+    return this.toolContext.steps;
   }
 
   private buildSystemPrompt(): string {
@@ -43,6 +53,7 @@ export class AgentCore {
         return {
           message: response.content,
           results: this.toolContext.results,
+          steps: this.toolContext.steps,
         };
       }
 
@@ -66,6 +77,7 @@ export class AgentCore {
     return {
       message: '⚠️ Reached maximum iterations. Test run may be incomplete.',
       results: this.toolContext.results,
+      steps: this.toolContext.steps,
     };
   }
 }
@@ -73,6 +85,7 @@ export class AgentCore {
 export interface AgentRunResult {
   message: string;
   results: TestResult[];
+  steps: StepEntry[];
 }
 
 export interface TestResult {

@@ -1,11 +1,17 @@
 import { loadConfig } from '../../lib/config';
 import { createAdapter } from '../../lib/adapters/factory';
 import { AgentCore } from '../../lib/agent/core';
+import { formatStep, FormatOptions } from '../format-step';
 
 export async function runTest(args: string[]): Promise<void> {
-  const scenario = args.join(' ');
+  const verbose = args.includes('--verbose') || args.includes('-v');
+  const filteredArgs = args.filter(a => a !== '--verbose' && a !== '-v');
+  const scenario = filteredArgs.join(' ');
+
   if (!scenario) {
     console.log('Usage: anvil test "describe your test scenario"');
+    console.log('\nOptions:');
+    console.log('  --verbose, -v    Show full request/response headers');
     console.log('\nExamples:');
     console.log('  anvil test "Test CRUD operations on /users endpoint"');
     console.log('  anvil test "Create a new order, then verify it appears in the list"');
@@ -17,10 +23,16 @@ export async function runTest(args: string[]): Promise<void> {
 
   const config = loadConfig();
   const adapter = createAdapter(config.llm.provider, config.llm.apiKey, config.llm.model);
+
+  const formatOpts: FormatOptions = { verbose, maxBodyChars: 500 };
+
   const agent = new AgentCore(adapter, {
     baseUrl: config.target.baseUrl,
     auth: config.target.auth,
     knowledgeDir: config.knowledge?.dir,
+    onStep: (step) => {
+      console.log(formatStep(step, formatOpts));
+    },
   });
 
   console.log(`🎯 Target: ${config.target.baseUrl}`);
@@ -46,6 +58,8 @@ export async function runTest(args: string[]): Promise<void> {
       }
       console.log(`\n  Total: ${result.results.length} | ✅ ${passed} | ❌ ${failed} | ⚠️ ${warned}`);
     }
+
+    console.log(`\n📊 Steps executed: ${result.steps.length}`);
 
     if (result.message) {
       console.log(`\n💬 ${result.message}`);

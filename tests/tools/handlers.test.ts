@@ -4,8 +4,11 @@ function makeCtx(overrides?: Partial<ToolContext>): ToolContext {
   return {
     baseUrl: 'https://api.example.com',
     lastResponse: null,
+    lastRequest: null,
     variables: {},
     results: [],
+    stepCount: 0,
+    steps: [],
     ...overrides,
   };
 }

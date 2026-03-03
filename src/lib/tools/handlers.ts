@@ -1,4 +1,5 @@
 import { executeRequest, ExecutionResult } from '../executor/http';
+import { StepEntry, StepRequest, StepCallback } from '../step-log';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -7,8 +8,12 @@ export interface ToolContext {
   auth?: { type: string; token?: string; header?: string };
   knowledgeDir?: string;
   lastResponse: ExecutionResult | null;
+  lastRequest: StepRequest | null;
   variables: Record<string, unknown>;
   results: TestResult[];
+  stepCount: number;
+  steps: StepEntry[];
+  onStep?: StepCallback;
 }
 
 export interface TestResult {
@@ -67,22 +72,51 @@ async function callApi(args: Record<string, unknown>, ctx: ToolContext) {
     body = JSON.parse(interpolateVars(JSON.stringify(body), ctx.variables));
   }
 
+  const queryParams = args.queryParams as Record<string, string> | undefined;
+  const stepRequest: StepRequest = { method, url, headers: { ...headers }, body, queryParams };
+  ctx.lastRequest = stepRequest;
+
   try {
     const result = await executeRequest({
       method,
       url,
       headers,
       data: body,
-      params: args.queryParams as Record<string, string> | undefined,
+      params: queryParams,
       validateStatus: () => true, // don't throw on non-2xx
     });
     ctx.lastResponse = result;
+
+    const step: StepEntry = {
+      stepNumber: ++ctx.stepCount,
+      toolName: 'call_api',
+      request: stepRequest,
+      response: {
+        status: result.status,
+        headers: result.headers,
+        body: result.body,
+        duration: result.duration,
+      },
+      timestamp: Date.now(),
+    };
+    ctx.steps.push(step);
+    ctx.onStep?.(step);
+
     return {
       status: result.status,
       body: result.body,
       duration: `${result.duration}ms`,
     };
   } catch (err: any) {
+    const step: StepEntry = {
+      stepNumber: ++ctx.stepCount,
+      toolName: 'call_api',
+      request: stepRequest,
+      error: err.message,
+      timestamp: Date.now(),
+    };
+    ctx.steps.push(step);
+    ctx.onStep?.(step);
     return { error: err.message };
   }
 }
@@ -92,7 +126,18 @@ function assertStatus(args: Record<string, unknown>, ctx: ToolContext) {
   const expected = args.expected as number;
   const actual = ctx.lastResponse.status;
   const passed = actual === expected;
-  return { passed, expected, actual, message: passed ? 'Status matches' : `Expected ${expected}, got ${actual}` };
+  const message = passed ? 'Status matches' : `Expected ${expected}, got ${actual}`;
+
+  const step: StepEntry = {
+    stepNumber: ++ctx.stepCount,
+    toolName: 'assert_status',
+    assertion: { type: 'status', passed, expected, actual, message },
+    timestamp: Date.now(),
+  };
+  ctx.steps.push(step);
+  ctx.onStep?.(step);
+
+  return { passed, expected, actual, message };
 }
 
 function assertBody(args: Record<string, unknown>, ctx: ToolContext) {
@@ -103,33 +148,62 @@ function assertBody(args: Record<string, unknown>, ctx: ToolContext) {
   const actual = getByPath(ctx.lastResponse.body, jsonPath);
 
   if (actual === undefined && operator !== 'exists') {
-    return { passed: false, message: `Path "${jsonPath}" not found in response` };
+    const r = { passed: false, message: `Path "${jsonPath}" not found in response` };
+    emitAssertBody(ctx, false, args.expected, actual, r.message);
+    return r;
   }
+
+  let result: { passed: boolean; expected?: unknown; actual?: unknown; actualType?: string; message?: string };
 
   switch (operator) {
     case 'exists':
-      return { passed: actual !== undefined, actual, message: actual !== undefined ? 'Path exists' : `Path "${jsonPath}" not found` };
-    case 'eq':
+      result = { passed: actual !== undefined, actual, message: actual !== undefined ? 'Path exists' : `Path "${jsonPath}" not found` };
+      break;
+    case 'eq': {
       const passed = JSON.stringify(actual) === JSON.stringify(args.expected);
-      return { passed, expected: args.expected, actual, message: passed ? 'Values match' : 'Values do not match' };
-    case 'neq':
+      result = { passed, expected: args.expected, actual, message: passed ? 'Values match' : 'Values do not match' };
+      break;
+    }
+    case 'neq': {
       const neq = JSON.stringify(actual) !== JSON.stringify(args.expected);
-      return { passed: neq, expected: args.expected, actual };
+      result = { passed: neq, expected: args.expected, actual };
+      break;
+    }
     case 'gt':
-      return { passed: (actual as number) > (args.expected as number), actual, expected: args.expected };
+      result = { passed: (actual as number) > (args.expected as number), actual, expected: args.expected };
+      break;
     case 'lt':
-      return { passed: (actual as number) < (args.expected as number), actual, expected: args.expected };
-    case 'contains':
+      result = { passed: (actual as number) < (args.expected as number), actual, expected: args.expected };
+      break;
+    case 'contains': {
       const contains = typeof actual === 'string'
         ? actual.includes(args.expected as string)
         : Array.isArray(actual) && actual.includes(args.expected);
-      return { passed: contains, actual, expected: args.expected };
-    case 'type':
+      result = { passed: contains, actual, expected: args.expected };
+      break;
+    }
+    case 'type': {
       const typeMatch = typeof actual === args.expected || (Array.isArray(actual) && args.expected === 'array');
-      return { passed: typeMatch, actualType: Array.isArray(actual) ? 'array' : typeof actual, expected: args.expected };
+      result = { passed: typeMatch, actualType: Array.isArray(actual) ? 'array' : typeof actual, expected: args.expected };
+      break;
+    }
     default:
-      return { passed: false, message: `Unknown operator: ${operator}` };
+      result = { passed: false, message: `Unknown operator: ${operator}` };
   }
+
+  emitAssertBody(ctx, result.passed, args.expected, actual, result.message || `${operator}: ${result.passed ? 'passed' : 'failed'}`);
+  return result;
+}
+
+function emitAssertBody(ctx: ToolContext, passed: boolean, expected: unknown, actual: unknown, message: string) {
+  const step: StepEntry = {
+    stepNumber: ++ctx.stepCount,
+    toolName: 'assert_body',
+    assertion: { type: 'body', passed, expected, actual, message },
+    timestamp: Date.now(),
+  };
+  ctx.steps.push(step);
+  ctx.onStep?.(step);
 }
 
 function extractValue(args: Record<string, unknown>, ctx: ToolContext) {
@@ -139,6 +213,16 @@ function extractValue(args: Record<string, unknown>, ctx: ToolContext) {
   const value = getByPath(ctx.lastResponse.body, jsonPath);
   if (value === undefined) return { error: `Path "${jsonPath}" not found in response` };
   ctx.variables[name] = value;
+
+  const step: StepEntry = {
+    stepNumber: ++ctx.stepCount,
+    toolName: 'extract_value',
+    extraction: { name, value },
+    timestamp: Date.now(),
+  };
+  ctx.steps.push(step);
+  ctx.onStep?.(step);
+
   return { name, value };
 }
 
@@ -187,6 +271,16 @@ function reportResult(args: Record<string, unknown>, ctx: ToolContext) {
     message: args.message as string | undefined,
   };
   ctx.results.push(result);
+
+  const step: StepEntry = {
+    stepNumber: ++ctx.stepCount,
+    toolName: 'report_result',
+    result: { testName: result.testName, status: result.status, message: result.message },
+    timestamp: Date.now(),
+  };
+  ctx.steps.push(step);
+  ctx.onStep?.(step);
+
   const icon = result.status === 'pass' ? '✅' : result.status === 'fail' ? '❌' : '⚠️';
   return { logged: true, summary: `${icon} ${result.testName}: ${result.status}${result.message ? ' — ' + result.message : ''}` };
 }
