@@ -2,6 +2,7 @@ import { executeRequest, ExecutionResult } from '../executor/http';
 import { StepEntry, StepRequest, StepCallback } from '../step-log';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as readline from 'readline';
 
 export interface ToolContext {
   baseUrl: string;
@@ -40,6 +41,8 @@ export async function handleToolCall(
       return getVariable(args, ctx);
     case 'read_knowledge':
       return readKnowledge(args, ctx);
+    case 'ask_user':
+      return askUser(args, ctx);
     case 'report_result':
       return reportResult(args, ctx);
     default:
@@ -237,12 +240,26 @@ async function readKnowledge(args: Record<string, unknown>, ctx: ToolContext) {
   const query = (args.query as string).toLowerCase();
 
   try {
-    const files = fs.readdirSync(ctx.knowledgeDir).filter(f => f.endsWith('.md'));
-    if (files.length === 0) return { message: 'Knowledge base is empty. No API specs have been imported yet.' };
+    const allFiles = fs.readdirSync(ctx.knowledgeDir);
+    const mdFiles = allFiles.filter(f => f.endsWith('.md'));
+    const jsonFiles = allFiles.filter(f => f.endsWith('.json'));
 
-    // Simple keyword search across knowledge files
+    if (mdFiles.length === 0 && jsonFiles.length === 0) {
+      return { message: 'Knowledge base is empty. No API specs have been imported yet.' };
+    }
+
     const results: { file: string; content: string }[] = [];
-    for (const file of files) {
+
+    // Search structured JSON files first for detailed schema lookups
+    for (const file of jsonFiles) {
+      const content = fs.readFileSync(path.join(ctx.knowledgeDir, file), 'utf-8');
+      if (content.toLowerCase().includes(query) || file.toLowerCase().includes(query)) {
+        results.push({ file, content: content.slice(0, 5000) });
+      }
+    }
+
+    // Also search markdown files
+    for (const file of mdFiles) {
       const content = fs.readFileSync(path.join(ctx.knowledgeDir, file), 'utf-8');
       if (content.toLowerCase().includes(query) || file.toLowerCase().includes(query)) {
         results.push({ file, content: content.slice(0, 3000) });
@@ -250,10 +267,9 @@ async function readKnowledge(args: Record<string, unknown>, ctx: ToolContext) {
     }
 
     if (results.length === 0) {
-      // Return all files as fallback
       return {
         message: `No exact match for "${query}". Available knowledge files:`,
-        files: files,
+        files: [...jsonFiles, ...mdFiles],
         hint: 'Try reading with a broader query, or use a filename.',
       };
     }
@@ -262,6 +278,31 @@ async function readKnowledge(args: Record<string, unknown>, ctx: ToolContext) {
   } catch {
     return { error: 'Failed to read knowledge directory' };
   }
+}
+
+async function askUser(args: Record<string, unknown>, ctx: ToolContext) {
+  const question = args.question as string;
+
+  const step: StepEntry = {
+    stepNumber: ++ctx.stepCount,
+    toolName: 'ask_user',
+    timestamp: Date.now(),
+  };
+  ctx.steps.push(step);
+  ctx.onStep?.(step);
+
+  // Prompt via stdin
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  return new Promise<{ answer: string }>((resolve) => {
+    rl.question(`\n🤖 Agent asks: ${question}\n> `, (answer) => {
+      rl.close();
+      resolve({ answer: answer.trim() });
+    });
+  });
 }
 
 function reportResult(args: Record<string, unknown>, ctx: ToolContext) {

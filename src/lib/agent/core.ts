@@ -1,8 +1,9 @@
-import { LLMAdapter, LLMMessage, ToolCall } from '../adapters/interface';
+import { LLMAdapter, LLMMessage } from '../adapters/interface';
 import { TOOLS } from '../tools/definitions';
 import { handleToolCall, ToolContext } from '../tools/handlers';
 import { StepCallback, StepEntry } from '../step-log';
 import { SYSTEM_PROMPT } from './prompts';
+import { buildKnowledgeSummary } from './knowledge-injector';
 
 export interface AgentConfig {
   baseUrl: string;
@@ -39,7 +40,18 @@ export class AgentCore {
   }
 
   private buildSystemPrompt(): string {
-    return SYSTEM_PROMPT;
+    let prompt = SYSTEM_PROMPT;
+
+    // Auto-inject API knowledge if available
+    if (this.toolContext.knowledgeDir) {
+      const summary = buildKnowledgeSummary(this.toolContext.knowledgeDir);
+      if (summary) {
+        prompt += '\n\n---\n\n# API Knowledge Base (Auto-injected)\n\n' + summary;
+        prompt += '\n\nThe above endpoints are available in the target API. Use `read_knowledge` only if you need detailed schema information for request/response bodies.';
+      }
+    }
+
+    return prompt;
   }
 
   async run(userInput: string): Promise<AgentRunResult> {

@@ -65,13 +65,24 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     name: 'read_knowledge',
-    description: 'Read the API knowledge base (parsed specs) to understand available endpoints, request/response schemas, and authentication requirements',
+    description: 'Look up detailed API schema information from the knowledge base. Use for deep schema lookups when you need full request/response body details beyond what is in the injected summary.',
     parameters: {
       type: 'object',
       properties: {
-        query: { type: 'string', description: 'What to look for (e.g. "user endpoints", "authentication", "create order")' },
+        query: { type: 'string', description: 'What to look for (e.g. "user endpoints", "authentication", "create order schema")' },
       },
       required: ['query'],
+    },
+  },
+  {
+    name: 'ask_user',
+    description: 'Ask the user a clarifying question when API spec info is insufficient or ambiguous. Wait for their response before proceeding.',
+    parameters: {
+      type: 'object',
+      properties: {
+        question: { type: 'string', description: 'The question to ask the user' },
+      },
+      required: ['question'],
     },
   },
   {
