@@ -10,6 +10,10 @@ async function main() {
       const { importSpec } = await import('./commands/import');
       await importSpec(process.argv.slice(3));
       break;
+    case 'setup':
+      const { runSetup } = await import('./commands/setup');
+      await runSetup();
+      break;
     case 'test':
       const { runTest } = await import('./commands/test');
       await runTest(process.argv.slice(3));
@@ -21,6 +25,7 @@ async function main() {
     default:
       console.log('Usage: anvil <command>\n');
       console.log('Commands:');
+      console.log('  setup    Configure LLM provider and credentials');
       console.log('  import   Import Postman collection or OpenAPI spec');
       console.log('  test     Run tests from natural language description');
       console.log('  report   View or export test results');
