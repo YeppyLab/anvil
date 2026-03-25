@@ -30,18 +30,26 @@ function askMasked(question: string): Promise<string> {
       stdin.setRawMode(true);
       rl.close();
 
+      const restoreTerminal = () => {
+        if (stdin.isTTY && stdin.setRawMode) stdin.setRawMode(wasRaw ?? false);
+      };
+      process.once('SIGTERM', restoreTerminal);
+      process.once('uncaughtException', (err) => { restoreTerminal(); throw err; });
+
       let input = '';
       const onData = (char: Buffer) => {
         const c = char.toString();
         if (c === '\n' || c === '\r') {
-          stdin.setRawMode!(wasRaw ?? false);
+          restoreTerminal();
           stdin.removeListener('data', onData);
+          process.removeListener('SIGTERM', restoreTerminal);
           process.stdout.write('\n');
           resolve(input);
         } else if (c === '\u0003') {
           // Ctrl+C
-          stdin.setRawMode!(wasRaw ?? false);
+          restoreTerminal();
           stdin.removeListener('data', onData);
+          process.removeListener('SIGTERM', restoreTerminal);
           process.exit(0);
         } else if (c === '\u007F' || c === '\b') {
           // Backspace
@@ -49,7 +57,7 @@ function askMasked(question: string): Promise<string> {
             input = input.slice(0, -1);
             process.stdout.write('\b \b');
           }
-        } else {
+        } else if (c.charCodeAt(0) >= 0x20 && !c.startsWith('\x1b')) {
           input += c;
           process.stdout.write('*');
         }
@@ -65,21 +73,18 @@ function askMasked(question: string): Promise<string> {
   });
 }
 
-function selectOption(rl: readline.Interface, question: string, options: string[]): Promise<number> {
-  return new Promise(async (resolve) => {
-    console.log(question);
-    options.forEach((opt, i) => console.log(`  ${i + 1}. ${opt}`));
+async function selectOption(rl: readline.Interface, question: string, options: string[]): Promise<number> {
+  console.log(question);
+  options.forEach((opt, i) => console.log(`  ${i + 1}. ${opt}`));
 
-    while (true) {
-      const answer = await ask(rl, `Choose (1-${options.length}): `);
-      const num = parseInt(answer, 10);
-      if (num >= 1 && num <= options.length) {
-        resolve(num - 1);
-        return;
-      }
-      console.log(`  Please enter a number between 1 and ${options.length}.`);
+  while (true) {
+    const answer = await ask(rl, `Choose (1-${options.length}): `);
+    const num = parseInt(answer, 10);
+    if (num >= 1 && num <= options.length) {
+      return num - 1;
     }
-  });
+    console.log(`  Please enter a number between 1 and ${options.length}.`);
+  }
 }
 
 export async function runSetup(): Promise<void> {

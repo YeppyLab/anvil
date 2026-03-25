@@ -2,7 +2,7 @@ import { loadConfig } from '../../lib/config';
 import { createAdapter } from '../../lib/adapters/factory';
 import { AgentCore } from '../../lib/agent/core';
 import { formatStep, FormatOptions } from '../format-step';
-import { hasCredentials, loadCredentials, getResolvedApiKey } from '../../lib/credentials';
+import { loadCredentials, getResolvedApiKey } from '../../lib/credentials';
 
 export async function runTest(args: string[]): Promise<void> {
   const verbose = args.includes('--verbose') || args.includes('-v');
@@ -20,7 +20,8 @@ export async function runTest(args: string[]): Promise<void> {
     return;
   }
 
-  if (!hasCredentials()) {
+  const credentials = loadCredentials();
+  if (!credentials || !getResolvedApiKey(credentials)) {
     console.log('No credentials found. Run `anvil setup` first.');
     return;
   }
@@ -30,7 +31,6 @@ export async function runTest(args: string[]): Promise<void> {
   const config = loadConfig();
 
   // Override LLM config with stored credentials
-  const credentials = loadCredentials()!;
   const providerMap = { anthropic: 'claude' as const, openai: 'openai' as const };
   config.llm.provider = providerMap[credentials.provider] || config.llm.provider;
   config.llm.apiKey = getResolvedApiKey(credentials);

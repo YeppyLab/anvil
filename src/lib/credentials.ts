@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 
 export interface AnvilCredentials {
@@ -13,8 +14,7 @@ interface CredentialFile {
 }
 
 function isDevMode(): boolean {
-  // Running from source if __dirname is inside a src/ or has no node_modules ancestor
-  return __dirname.includes(path.sep + 'src' + path.sep) ||
+  return process.env.ANVIL_DEV === '1' ||
     fs.existsSync(path.resolve(__dirname, '../../tsconfig.json'));
 }
 
@@ -25,7 +25,7 @@ function getCredentialDir(): string {
     return path.join(workspaceRoot, '.anvil');
   }
   // Published: ~/.anvil/
-  return path.join(process.env.HOME || process.env.USERPROFILE || '~', '.anvil');
+  return path.join(os.homedir(), '.anvil');
 }
 
 function getCredentialPath(): string {
@@ -48,12 +48,12 @@ export function loadCredentials(): AnvilCredentials | null {
 export function saveCredentials(credentials: AnvilCredentials): void {
   const dir = getCredentialDir();
   if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   }
 
   const filePath = getCredentialPath();
   const data: CredentialFile = { credentials };
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
+  fs.writeFileSync(filePath, JSON.stringify(data, null, 2), { encoding: 'utf-8', mode: 0o600 });
 
   // Auto-add .anvil/ to .gitignore if storing locally (dev mode)
   if (isDevMode()) {
