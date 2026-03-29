@@ -30,30 +30,44 @@ function askMasked(question: string): Promise<string> {
       process.once('SIGTERM', restoreTerminal);
       process.once('uncaughtException', (err) => { restoreTerminal(); throw err; });
 
+      const promptLen = question.replace(/^\n+/, '').length;
       let input = '';
-      const onData = (char: Buffer) => {
-        const c = char.toString();
-        if (c === '\n' || c === '\r') {
-          restoreTerminal();
-          stdin.removeListener('data', onData);
-          process.removeListener('SIGTERM', restoreTerminal);
-          process.stdout.write('\n');
-          resolve(input);
-        } else if (c === '\u0003') {
-          // Ctrl+C
-          restoreTerminal();
-          stdin.removeListener('data', onData);
-          process.removeListener('SIGTERM', restoreTerminal);
-          process.exit(0);
-        } else if (c === '\u007F' || c === '\b') {
-          // Backspace
-          if (input.length > 0) {
-            input = input.slice(0, -1);
-            process.stdout.write('\b \b');
+
+      const redraw = () => {
+        // Move to start of input (after prompt), clear to end, redraw masked input
+        process.stdout.write(`\r${question.replace(/^\n+/, '')}${'*'.repeat(input.length)}`);
+        // Clear any leftover chars after current masked length
+        process.stdout.write('\x1b[K');
+      };
+
+      const finish = () => {
+        restoreTerminal();
+        stdin.removeListener('data', onData);
+        process.removeListener('SIGTERM', restoreTerminal);
+      };
+
+      const onData = (chunk: Buffer) => {
+        const str = chunk.toString();
+        for (const c of str) {
+          if (c === '\n' || c === '\r') {
+            finish();
+            process.stdout.write('\n');
+            resolve(input);
+            return;
+          } else if (c === '\u0003') {
+            // Ctrl+C
+            finish();
+            process.exit(0);
+          } else if (c === '\u007F' || c === '\b') {
+            // Backspace — only delete input chars, never the prompt
+            if (input.length > 0) {
+              input = input.slice(0, -1);
+              process.stdout.write('\b \b');
+            }
+          } else if (c.charCodeAt(0) >= 0x20 && !c.startsWith('\x1b')) {
+            input += c;
+            process.stdout.write('*');
           }
-        } else if (c.charCodeAt(0) >= 0x20 && !c.startsWith('\x1b')) {
-          input += c;
-          process.stdout.write('*');
         }
       };
       stdin.on('data', onData);
