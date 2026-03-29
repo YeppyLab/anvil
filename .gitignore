@@ -12,3 +12,6 @@ src/knowledge/*.md
 !.yarn/releases
 !.yarn/plugins
 .pnp.*
+
+# Anvil credentials
+.anvil/
