@@ -16,19 +16,13 @@ function ask(rl: readline.Interface, question: string): Promise<string> {
 
 function askMasked(question: string): Promise<string> {
   return new Promise((resolve) => {
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
-    });
-
-    process.stdout.write(question);
-
     const stdin = process.stdin;
     const wasRaw = stdin.isRaw;
 
+    process.stdout.write(question);
+
     if (stdin.isTTY && stdin.setRawMode) {
       stdin.setRawMode(true);
-      rl.close();
 
       const restoreTerminal = () => {
         if (stdin.isTTY && stdin.setRawMode) stdin.setRawMode(wasRaw ?? false);
@@ -65,6 +59,10 @@ function askMasked(question: string): Promise<string> {
       stdin.on('data', onData);
     } else {
       // Non-TTY fallback (no masking)
+      const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+      });
       rl.question('', (answer) => {
         rl.close();
         resolve(answer.trim());
@@ -117,7 +115,9 @@ export async function runSetup(): Promise<void> {
     }
 
     // 3. Credential input
-    rl.close(); // Close rl before masked input
+    // Close rl and resume stdin (rl.close() pauses it)
+    rl.close();
+    process.stdin.resume();
 
     let credentials: AnvilCredentials;
 
