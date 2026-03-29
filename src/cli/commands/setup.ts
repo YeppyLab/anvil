@@ -158,5 +158,7 @@ export async function runSetup(): Promise<void> {
     console.log('   Run `anvil test` to start testing!\n');
   } finally {
     rl.close();
+    // Pause stdin so Node can exit (resume() earlier keeps the event loop alive)
+    process.stdin.pause();
   }
 }
