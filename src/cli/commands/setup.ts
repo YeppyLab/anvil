@@ -1,4 +1,7 @@
+import * as fs from 'fs';
+import * as path from 'path';
 import * as readline from 'readline';
+import { stringify as stringifyYaml } from 'yaml';
 import { loadCredentials, saveCredentials, AnvilCredentials } from '../../lib/credentials';
 
 function createPrompt(): readline.Interface {
@@ -99,26 +102,48 @@ async function selectOption(rl: readline.Interface, question: string, options: s
   }
 }
 
+function getConfigFilePath(): string {
+  return path.resolve(process.cwd(), 'anvil.config.yaml');
+}
+
 export async function runSetup(): Promise<void> {
   console.log('⚙️  Anvil Setup Wizard\n');
 
-  const existing = loadCredentials();
-  if (existing) {
-    console.log(`Current config: provider=${existing.provider}, auth=${existing.authMode}`);
-    console.log('Re-running setup will overwrite existing credentials.\n');
+  // 1. Check for existing config or credentials → overwrite prompt
+  const configPath = getConfigFilePath();
+  const existingCredentials = loadCredentials();
+  const existingConfig = fs.existsSync(configPath);
+
+  if (existingCredentials || existingConfig) {
+    const rlCheck = createPrompt();
+    const answer = await ask(rlCheck, 'Existing configuration found. Overwrite? (y/N) ');
+    rlCheck.close();
+    if (answer.toLowerCase() !== 'y') {
+      console.log('Setup cancelled.');
+      process.stdin.pause();
+      return;
+    }
+    console.log();
   }
 
-  const rl = createPrompt();
+  let rl = createPrompt();
+
+  // Collected target config values
+  let targetBaseUrl = '';
+  let targetAuthType: 'bearer' | 'api-key' | 'none' = 'none';
+  let targetToken = '';
+  let targetApiKey = '';
+  let targetHeaderName = 'X-API-Key';
 
   try {
-    // 1. Provider
+    // 2. LLM provider
     const providerIdx = await selectOption(rl, 'Select LLM provider:', [
       'Anthropic (Claude)',
       'OpenAI (GPT)',
     ]);
     const provider: AnvilCredentials['provider'] = providerIdx === 0 ? 'anthropic' : 'openai';
 
-    // 2. Auth mode
+    // 3. Auth mode (Anthropic only)
     let authMode: AnvilCredentials['authMode'] = 'api-key';
     if (provider === 'anthropic') {
       const authIdx = await selectOption(rl, '\nSelect authentication mode:', [
@@ -128,11 +153,11 @@ export async function runSetup(): Promise<void> {
       authMode = authIdx === 0 ? 'api-key' : 'oauth-token';
     }
 
-    // 3. Credential input
-    // Close rl and resume stdin (rl.close() pauses it)
+    // 4. Close rl and resume stdin before masked input
     rl.close();
     process.stdin.resume();
 
+    // 5. LLM credential input
     let credentials: AnvilCredentials;
 
     if (authMode === 'oauth-token') {
@@ -152,13 +177,83 @@ export async function runSetup(): Promise<void> {
       credentials = { provider, authMode, apiKey: key };
     }
 
-    // 4. Save
+    // 6. Save credentials
     saveCredentials(credentials);
     console.log('\n✅ Credentials saved successfully.');
-    console.log('   Run `anvil test` to start testing!\n');
+
+    // 7. Target API config — new rl for plain text questions
+    rl = createPrompt();
+
+    targetBaseUrl = await ask(rl, '\nTarget API base URL (e.g. https://api.example.com/v1): ');
+
+    const authTypeIdx = await selectOption(rl, '\nTarget API authentication type:', [
+      'Bearer token',
+      'API Key (header)',
+      'None',
+    ]);
+    targetAuthType = (['bearer', 'api-key', 'none'] as const)[authTypeIdx];
+
+    // 8. Target auth credentials
+    if (targetAuthType === 'bearer') {
+      rl.close();
+      process.stdin.resume();
+      targetToken = await askMasked('\nEnter bearer token: ');
+    } else if (targetAuthType === 'api-key') {
+      rl.close();
+      process.stdin.resume();
+      targetApiKey = await askMasked('\nEnter API key: ');
+      // Resume rl for the header name (plain text)
+      rl = createPrompt();
+      const headerInput = await ask(rl, '\nHeader name (default: X-API-Key): ');
+      targetHeaderName = headerInput || 'X-API-Key';
+      rl.close();
+    } else {
+      rl.close();
+    }
+
+    // 9. Build and write anvil.config.yaml
+    const llmProvider = provider === 'anthropic' ? 'claude' : 'openai';
+    const llmModel = llmProvider === 'claude' ? 'claude-sonnet-4-20250514' : 'gpt-4o';
+
+    type TargetAuth = { type: string; token?: string; header?: string };
+    let targetAuth: TargetAuth | undefined;
+    if (targetAuthType === 'bearer') {
+      targetAuth = { type: 'bearer', token: targetToken };
+    } else if (targetAuthType === 'api-key') {
+      targetAuth = { type: 'api-key', token: targetApiKey, header: targetHeaderName };
+    }
+
+    const config: Record<string, unknown> = {
+      target: {
+        baseUrl: targetBaseUrl,
+        ...(targetAuth ? { auth: targetAuth } : {}),
+      },
+      llm: {
+        provider: llmProvider,
+        model: llmModel,
+        apiKey: '',
+      },
+      knowledge: {
+        dir: './src/knowledge',
+      },
+    };
+
+    fs.writeFileSync(configPath, stringifyYaml(config), 'utf-8');
+
+    // 10. Summary
+    console.log('\n✅ anvil.config.yaml generated.\n');
+    console.log('Configuration summary:');
+    console.log(`  LLM provider : ${llmProvider}`);
+    console.log(`  LLM model    : ${llmModel}`);
+    console.log(`  LLM auth     : ${authMode}`);
+    console.log(`  Target URL   : ${targetBaseUrl || '(none)'}`);
+    console.log(`  Target auth  : ${targetAuthType}`);
+    if (targetAuthType === 'api-key') {
+      console.log(`  Header name  : ${targetHeaderName}`);
+    }
+    console.log('\n  Run `anvil test` to start testing!\n');
   } finally {
     rl.close();
-    // Pause stdin so Node can exit (resume() earlier keeps the event loop alive)
     process.stdin.pause();
   }
 }
