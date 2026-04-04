@@ -5,10 +5,12 @@ import { extractErrorMessage } from '../utils/error';
 export class ClaudeAdapter implements LLMAdapter {
   private apiKey: string;
   private model: string;
+  private authMode: 'api-key' | 'oauth-token';
 
-  constructor(apiKey: string, model: string = 'claude-sonnet-4-20250514') {
+  constructor(apiKey: string, model: string = 'claude-sonnet-4-20250514', authMode: 'api-key' | 'oauth-token' = 'api-key') {
     this.apiKey = apiKey;
     this.model = model;
+    this.authMode = authMode;
   }
 
   async chat(messages: LLMMessage[]): Promise<LLMResponse> {
@@ -39,7 +41,9 @@ export class ClaudeAdapter implements LLMAdapter {
     try {
       res = await axios.post('https://api.anthropic.com/v1/messages', body, {
         headers: {
-          'x-api-key': this.apiKey,
+          ...(this.authMode === 'oauth-token'
+            ? { 'Authorization': 'Bearer ' + this.apiKey }
+            : { 'x-api-key': this.apiKey }),
           'anthropic-version': '2023-06-01',
           'Content-Type': 'application/json',
         },

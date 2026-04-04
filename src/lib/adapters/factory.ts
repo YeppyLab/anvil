@@ -2,12 +2,12 @@ import { LLMAdapter } from './interface';
 import { OpenAIAdapter } from './openai';
 import { ClaudeAdapter } from './claude';
 
-export function createAdapter(provider: string, apiKey: string, model: string): LLMAdapter {
+export function createAdapter(provider: string, apiKey: string, model: string, authMode?: 'api-key' | 'oauth-token'): LLMAdapter {
   switch (provider) {
     case 'openai':
       return new OpenAIAdapter(apiKey, model);
     case 'claude':
-      return new ClaudeAdapter(apiKey, model);
+      return new ClaudeAdapter(apiKey, model, authMode);
     case 'gemini':
       throw new Error('Gemini adapter not yet implemented');
     default:
