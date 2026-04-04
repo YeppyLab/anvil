@@ -3,8 +3,6 @@ import { extractErrorMessage } from '../utils/error';
 import { StepEntry, StepRequest, StepCallback } from '../step-log';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as readline from 'readline';
-
 export interface ToolContext {
   baseUrl: string;
   auth?: { type: string; token?: string; header?: string };
@@ -16,6 +14,7 @@ export interface ToolContext {
   stepCount: number;
   steps: StepEntry[];
   onStep?: StepCallback;
+  onAskUser?: (question: string) => Promise<string>;
 }
 
 export interface TestResult {
@@ -293,18 +292,12 @@ async function askUser(args: Record<string, unknown>, ctx: ToolContext) {
   ctx.steps.push(step);
   ctx.onStep?.(step);
 
-  // Prompt via stdin
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
+  if (!ctx.onAskUser) {
+    return { error: 'Interactive mode not available — no onAskUser callback configured' };
+  }
 
-  return new Promise<{ answer: string }>((resolve) => {
-    rl.question(`\n🤖 Agent asks: ${question}\n> `, (answer) => {
-      rl.close();
-      resolve({ answer: answer.trim() });
-    });
-  });
+  const answer = await ctx.onAskUser(question);
+  return { answer: answer.trim() };
 }
 
 function reportResult(args: Record<string, unknown>, ctx: ToolContext) {

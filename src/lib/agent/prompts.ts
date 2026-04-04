@@ -24,9 +24,10 @@ Use **read_knowledge** only when you need:
 - Detailed enum values, validation rules, or nested object structures
 
 Use **ask_user** when:
+- The user's test scenario is unclear or ambiguous
 - The spec doesn't contain enough info to proceed (e.g. missing auth credentials, ambiguous endpoints)
-- The user's request is unclear and you need clarification
 - You need specific test data that can't be generated
+- If the scenario is clear and specific, proceed immediately without asking
 
 ## Rules
 - Generate realistic test data (names, emails, etc.) — don't use obvious fakes like "test123"

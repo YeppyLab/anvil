@@ -10,6 +10,7 @@ export interface AgentConfig {
   auth?: { type: string; token?: string; header?: string };
   knowledgeDir?: string;
   onStep?: StepCallback;
+  onAskUser?: (question: string) => Promise<string>;
 }
 
 export class AgentCore {
@@ -31,6 +32,7 @@ export class AgentCore {
       stepCount: 0,
       steps: [],
       onStep: config.onStep,
+      onAskUser: config.onAskUser,
     };
     this.history.push({ role: 'system', content: this.buildSystemPrompt() });
   }
