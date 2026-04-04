@@ -1,4 +1,5 @@
 import { executeRequest, ExecutionResult } from '../executor/http';
+import { extractErrorMessage } from '../utils/error';
 import { StepEntry, StepRequest, StepCallback } from '../step-log';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -111,16 +112,17 @@ async function callApi(args: Record<string, unknown>, ctx: ToolContext) {
       duration: `${result.duration}ms`,
     };
   } catch (err: any) {
+    const errorMessage = extractErrorMessage(err);
     const step: StepEntry = {
       stepNumber: ++ctx.stepCount,
       toolName: 'call_api',
       request: stepRequest,
-      error: err.message,
+      error: errorMessage,
       timestamp: Date.now(),
     };
     ctx.steps.push(step);
     ctx.onStep?.(step);
-    return { error: err.message };
+    return { error: errorMessage };
   }
 }
 

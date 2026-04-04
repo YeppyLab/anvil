@@ -77,7 +77,8 @@ export async function runTest(args: string[]): Promise<void> {
       console.log(`\n💬 ${result.message}`);
     }
   } catch (err: any) {
-    console.error(`\n❌ Error: ${err.message}`);
+    const { extractErrorMessage } = await import('../../lib/utils/error');
+    console.error(`\n❌ Error: ${extractErrorMessage(err)}`);
     process.exit(1);
   }
 }
