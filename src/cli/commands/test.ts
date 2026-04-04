@@ -1,3 +1,4 @@
+import * as readline from 'readline';
 import { loadConfig } from '../../lib/config';
 import { createAdapter } from '../../lib/adapters/factory';
 import { AgentCore } from '../../lib/agent/core';
@@ -39,10 +40,24 @@ export async function runTest(args: string[]): Promise<void> {
 
   const formatOpts: FormatOptions = { verbose, maxBodyChars: 500 };
 
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  const onAskUser = (question: string): Promise<string> => {
+    return new Promise((resolve) => {
+      rl.question(`\n🤖 Agent asks: ${question}\n> `, (answer) => {
+        resolve(answer);
+      });
+    });
+  };
+
   const agent = new AgentCore(adapter, {
     baseUrl: config.target.baseUrl,
     auth: config.target.auth,
     knowledgeDir: config.knowledge?.dir,
+    onAskUser,
     onStep: (step) => {
       console.log(formatStep(step, formatOpts));
     },
@@ -80,5 +95,7 @@ export async function runTest(args: string[]): Promise<void> {
   } catch (err: any) {
     console.error(`\n❌ Error: ${extractErrorMessage(err)}`);
     process.exit(1);
+  } finally {
+    rl.close();
   }
 }
