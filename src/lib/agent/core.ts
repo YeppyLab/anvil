@@ -64,6 +64,14 @@ export class AgentCore {
 
       if (!response.toolCalls?.length) {
         this.history.push({ role: 'assistant', content: response.content });
+
+        // Merge parsed results from single-shot adapters (e.g. ClaudeCodeAdapter)
+        if (response.parsedResults?.length) {
+          for (const r of response.parsedResults) {
+            this.toolContext.results.push(r);
+          }
+        }
+
         return {
           message: response.content,
           results: this.toolContext.results,
