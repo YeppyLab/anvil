@@ -36,7 +36,13 @@ export async function runTest(args: string[]): Promise<void> {
   const providerMap = { anthropic: 'claude' as const, openai: 'openai' as const };
   config.llm.provider = providerMap[credentials.provider] || config.llm.provider;
   config.llm.apiKey = getResolvedApiKey(credentials);
-  const adapter = createAdapter(config.llm.provider, config.llm.apiKey, config.llm.model, credentials.authMode);
+  const adapter = createAdapter(
+    config.llm.provider,
+    config.llm.apiKey,
+    config.llm.model,
+    credentials.authMode,
+    { baseUrl: config.target.baseUrl, auth: config.target.auth },
+  );
 
   const formatOpts: FormatOptions = { verbose, maxBodyChars: 500 };
 

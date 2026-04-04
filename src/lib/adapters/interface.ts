@@ -14,6 +14,7 @@ export interface ToolCall {
 export interface LLMResponse {
   content: string;
   toolCalls?: ToolCall[];
+  parsedResults?: { testName: string; status: 'pass' | 'fail' | 'warn'; message?: string }[];
 }
 
 export interface LLMAdapter {
