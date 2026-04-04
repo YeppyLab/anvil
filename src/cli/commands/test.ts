@@ -3,6 +3,7 @@ import { createAdapter } from '../../lib/adapters/factory';
 import { AgentCore } from '../../lib/agent/core';
 import { formatStep, FormatOptions } from '../format-step';
 import { loadCredentials, getResolvedApiKey } from '../../lib/credentials';
+import { extractErrorMessage } from '../../lib/utils/error';
 
 export async function runTest(args: string[]): Promise<void> {
   const verbose = args.includes('--verbose') || args.includes('-v');
@@ -77,7 +78,7 @@ export async function runTest(args: string[]): Promise<void> {
       console.log(`\n💬 ${result.message}`);
     }
   } catch (err: any) {
-    console.error(`\n❌ Error: ${err.message}`);
+    console.error(`\n❌ Error: ${extractErrorMessage(err)}`);
     process.exit(1);
   }
 }

@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { LLMAdapter, LLMMessage, LLMResponse, ToolDefinition, ToolCall } from './interface';
+import { extractErrorMessage } from '../utils/error';
 
 export class OpenAIAdapter implements LLMAdapter {
   private apiKey: string;
@@ -27,9 +28,14 @@ export class OpenAIAdapter implements LLMAdapter {
       }));
     }
 
-    const res = await axios.post('https://api.openai.com/v1/chat/completions', body, {
-      headers: { Authorization: `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' },
-    });
+    let res;
+    try {
+      res = await axios.post('https://api.openai.com/v1/chat/completions', body, {
+        headers: { Authorization: `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' },
+      });
+    } catch (err: any) {
+      throw new Error(`OpenAI API error: ${extractErrorMessage(err)}`);
+    }
 
     const choice = res.data.choices[0];
     const msg = choice.message;

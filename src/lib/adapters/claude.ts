@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { LLMAdapter, LLMMessage, LLMResponse, ToolDefinition, ToolCall } from './interface';
+import { extractErrorMessage } from '../utils/error';
 
 export class ClaudeAdapter implements LLMAdapter {
   private apiKey: string;
@@ -34,13 +35,18 @@ export class ClaudeAdapter implements LLMAdapter {
       }));
     }
 
-    const res = await axios.post('https://api.anthropic.com/v1/messages', body, {
-      headers: {
-        'x-api-key': this.apiKey,
-        'anthropic-version': '2023-06-01',
-        'Content-Type': 'application/json',
-      },
-    });
+    let res;
+    try {
+      res = await axios.post('https://api.anthropic.com/v1/messages', body, {
+        headers: {
+          'x-api-key': this.apiKey,
+          'anthropic-version': '2023-06-01',
+          'Content-Type': 'application/json',
+        },
+      });
+    } catch (err: any) {
+      throw new Error(`Claude API error: ${extractErrorMessage(err)}`);
+    }
 
     const content = res.data.content;
     let text = '';
